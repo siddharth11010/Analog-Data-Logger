@@ -50,6 +50,7 @@ void setup() {
 
  if (!SD.begin(SD_CS, SPI)) {
     Serial.println("Card Mount Failed!");
+    SwitchOff(LEDR, LEDG);
     while (1);
   }
   Serial.println("SD Card initialized.");
@@ -59,9 +60,20 @@ TaskHandle_t Channel1TaskHandle = NULL;
 TaskHandle_t Channel2TaskHandle = NULL;
 TaskHandle_t Channel3TaskHandle = NULL;
 TaskHandle_t Channel4TaskHandle = NULL;
+TaskHandle_t IndicatorTaskhandle = NULL;
+
+void IndicatorTask(void* parameter){
+ while(1){
+   if(!digitalRead(SWITCH)){
+    SwitchOn(LEDR, LEDG);
+  }
+  else{
+    SwitchOff(LEDR, LEDG);
+  }
+}}
 
 void Channel1Task(void *parameter) {
-  while(1){
+  while(!digitalRead(SWITCH)){
   C1Data = C1.Read(); 
   if(xSemaphoreTake(mutex, 0) == pdTRUE){
     DateTime now = rtc.now();
@@ -81,7 +93,7 @@ void Channel1Task(void *parameter) {
 }
 
 void Channel2Task(void *parameter) {
-  while(1){
+  while(!digitalRead(SWITCH)){
   C1Data = C2.Read(); 
   if(xSemaphoreTake(mutex, 0) == pdTRUE){
     DateTime now = rtc.now();
@@ -101,7 +113,7 @@ void Channel2Task(void *parameter) {
 }
 
 void Channel3Task(void *parameter) {
-  while(1){
+  while(!digitalRead(SWITCH)){
 
 C1Data = C3.Read();
     if(xSemaphoreTake(mutex, 0) == pdTRUE){
@@ -121,7 +133,7 @@ C1Data = C3.Read();
 }
 
 void Channel4Task(void *parameter) {
-while(1){
+while(!digitalRead(SWITCH)){
 C1Data = C4.Read(); 
   if(xSemaphoreTake(mutex, 0) == pdTRUE){
     DateTime now = rtc.now();
@@ -176,6 +188,15 @@ xTaskCreatePinnedToCore(
   NULL,
   1,
   &Channel4TaskHandle,
+  1);
+
+  xTaskCreatePinnedToCore(
+  IndicatorTask,
+  "IndicatorTask",
+  10000,
+  NULL,
+  1,
+  &IndicatorTaskhandle,
   1);
 
 }

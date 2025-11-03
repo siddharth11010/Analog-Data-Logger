@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <SD.h>
 #include <SPI.h>
+#include<config.h>
   void SwitchOn(int red, int green){
         digitalWrite(green, HIGH);
         digitalWrite(red, LOW);
@@ -33,6 +34,7 @@
     myFile.close();
     Serial.println("Entry added to CSV. " + FileName);
   } else {
+    SwitchOff(LEDR, LEDG);
     Serial.println("Error opening file for writing.");
   }
 }
