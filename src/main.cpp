@@ -1,3 +1,4 @@
+#include<Arduino.h> 
 #include <config.h>
 #include<ADC_config.h>
 #include <Functions.h>
@@ -7,14 +8,16 @@
 #include <SD.h>
 RTC_DS3231 rtc;
 
+
 #define SD_CS 5
 
 File myfile;
 
-ADC C1(2, 12);
-unsigned long CurrentTime = 0;
-unsigned long PreviousTime = 0;
-unsigned long interval = 1000;
+ADC C1(34, 12);
+ADC C2(35, 12);
+ADC C3(32, 12);
+ADC C4(33, 12);
+
 
 uint16_t Year;
 uint8_t Month;
@@ -23,7 +26,7 @@ uint8_t Hour;
 uint8_t Minute;
 uint8_t Second;
 uint16_t C1Data;
-
+static SemaphoreHandle_t mutex;
 void setup() {
   Serial.begin(9600);
   pinMode(SWITCH, INPUT_PULLUP);
@@ -50,13 +53,17 @@ void setup() {
     while (1);
   }
   Serial.println("SD Card initialized.");
+  mutex = xSemaphoreCreateMutex();
 }
+TaskHandle_t Channel1TaskHandle = NULL;
+TaskHandle_t Channel2TaskHandle = NULL;
+TaskHandle_t Channel3TaskHandle = NULL;
+TaskHandle_t Channel4TaskHandle = NULL;
 
-void loop() {
-  CurrentTime = millis();
-  if(digitalRead(SWITCH) == LOW){
-    SwitchOn(LEDR, LEDG);
-  if(CurrentTime>=(PreviousTime + interval)){
+void Channel1Task(void *parameter) {
+  while(1){
+  C1Data = C1.Read(); 
+  if(xSemaphoreTake(mutex, 0) == pdTRUE){
     DateTime now = rtc.now();
    
     Day = now.day();
@@ -65,14 +72,110 @@ void loop() {
     Hour = now.hour();
     Minute = now.minute();
     Second = now.second();
-    C1Data = C1.Read(); 
-    Serial.println(C1Data);
-    writeCSV(Year, Month, Day, Hour, Minute, Second, C1Data, myfile);
-    PreviousTime = CurrentTime;
+    writeCSV(Year, Month, Day, Hour, Minute, Second, C1Data, myfile, "/C1Data.csv");
+   xSemaphoreGive(mutex);
   }
-  else{
-    SwitchOff(LEDR, LEDG);
+    vTaskDelay(1000/portTICK_PERIOD_MS);
+  }
+
+}
+
+void Channel2Task(void *parameter) {
+  while(1){
+  C1Data = C2.Read(); 
+  if(xSemaphoreTake(mutex, 0) == pdTRUE){
+    DateTime now = rtc.now();
+   
+    Day = now.day();
+    Month = now.month();
+    Year = now.year();
+    Hour = now.hour();
+    Minute = now.minute();
+    Second = now.second();
+    
+     writeCSV(Year, Month, Day, Hour, Minute, Second, C1Data, myfile, "/C2Data.csv");
+    xSemaphoreGive(mutex);
+    }
+  vTaskDelay(1000/portTICK_PERIOD_MS);
   }
 }
+
+void Channel3Task(void *parameter) {
+  while(1){
+
+C1Data = C3.Read();
+    if(xSemaphoreTake(mutex, 0) == pdTRUE){
+    DateTime now = rtc.now();
+  
+    Day = now.day();
+    Month = now.month();
+    Year = now.year();
+    Hour = now.hour();
+    Minute = now.minute();
+    Second = now.second();
+     xSemaphoreGive(mutex);
+    writeCSV(Year, Month, Day, Hour, Minute, Second, C1Data, myfile, "/C3Data.csv");
+    }
+    vTaskDelay(1000/portTICK_PERIOD_MS);
+  }  
+}
+
+void Channel4Task(void *parameter) {
+while(1){
+C1Data = C4.Read(); 
+  if(xSemaphoreTake(mutex, 0) == pdTRUE){
+    DateTime now = rtc.now();
+   
+    Day = now.day();
+    Month = now.month();
+    Year = now.year();
+    Hour = now.hour();
+    Minute = now.minute();
+    Second = now.second();
+    
+    
+    writeCSV(Year, Month, Day, Hour, Minute, Second, C1Data, myfile, "/C4Data.csv");
+    xSemaphoreGive(mutex);
+  }
+    vTaskDelay(1000/portTICK_PERIOD_MS);
+
+}}
+
+void loop(){
+xTaskCreatePinnedToCore(
+  Channel1Task,
+  "Channel1Task",
+  10000,
+  NULL,
+  1,
+  &Channel1TaskHandle,
+  1);
+
+  xTaskCreatePinnedToCore(
+  Channel2Task,
+  "Channel2Task",
+  10000,
+  NULL,
+  1,
+  &Channel2TaskHandle,
+  1);
+
+  xTaskCreatePinnedToCore(
+  Channel3Task,
+  "Channel3Task",
+  10000,
+  NULL,
+  1,
+  &Channel3TaskHandle,
+  1);
+
+  xTaskCreatePinnedToCore(
+  Channel4Task,
+  "Channel4Task",
+  10000,
+  NULL,
+  1,
+  &Channel4TaskHandle,
+  1);
 
 }
