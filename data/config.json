@@ -1,0 +1,32 @@
+{
+  "channels": [
+    {
+      "id": 0,
+      "name": "Channel_1",
+      "enabled": true,
+      "samplingRate": 1000,
+      "resolution": 12
+    },
+    {
+      "id": 1,
+      "name": "Channel_2",
+      "enabled": true,
+      "samplingRate": 1000,
+      "resolution": 10
+    },
+    {
+      "id": 2,
+      "name": "Channel_3",
+      "enabled": false,
+      "samplingRate": 1000,
+      "resolution": 8
+    },
+    {
+      "id": 3,
+      "name": "Channel_4",
+      "enabled": true,
+      "samplingRate": 1000,
+      "resolution": 12
+    }
+  ]
+}

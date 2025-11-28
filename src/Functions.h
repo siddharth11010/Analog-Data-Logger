@@ -2,6 +2,10 @@
 #include <SD.h>
 #include <SPI.h>
 #include<config.h>
+#include<comms.h>
+
+
+
   void SwitchOn(int red, int green){
         digitalWrite(green, HIGH);
         digitalWrite(red, LOW);
@@ -12,8 +16,8 @@
         digitalWrite(green, LOW);
   }
 
-  void writeCSV(uint16_t Y,uint8_t M, uint8_t D, uint8_t H, uint8_t Mi, uint8_t S, uint16_t D1, File myFile, String FileName) {
-  myFile = SD.open(FileName, FILE_APPEND);
+  void writeCSV(uint16_t Y,uint8_t M, uint8_t D, uint8_t H, uint8_t Mi, uint8_t S, uint16_t D1, File myFile) {
+  // myFile = SD.open(FileName, FILE_APPEND);
   if (myFile) {
     
     myFile.print(D);
@@ -31,11 +35,11 @@
     myFile.print(D1);
     myFile.print("\n");
 
-    myFile.close();
-    Serial.println("Entry added to CSV. " + FileName);
+    // myFile.close();
+
   } else {
     SwitchOff(LEDR, LEDG);
-    Serial.println("Error opening file for writing.");
+    DEBUG_PRINTLN("Error opening file for writing.");
   }
 }
 
