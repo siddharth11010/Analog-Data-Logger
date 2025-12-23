@@ -2,16 +2,17 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>ESP32 Data Fetcher</title>
+    <title>ESP32 Data Logger</title>
     <script src="chart.min.js"></script>
     <style>
         /* Equivalent of Tailwind utility classes used in data_page.html */
 
+        /* General Layout */
         .bg-gray-100 { background-color: #f3f4f6; }
         .container { width: 100%; margin-left: auto; margin-right: auto; }
         .mx-auto { margin-left: auto; margin-right: auto; }
         .p-8 { padding: 2rem; }
-        .max-w-5xl { max-width: 64rem; } /* Equivalent to 64rem */
+        .max-w-5xl { max-width: 64rem; }
         .space-y-8 > :not([hidden]) ~ :not([hidden]) { --tw-space-y-reverse: 0; margin-top: calc(2rem * calc(1 - var(--tw-space-y-reverse))); margin-bottom: calc(2rem * var(--tw-space-y-reverse)); }
         .text-center { text-align: center; }
         .relative { position: relative; }
@@ -22,6 +23,8 @@
         .absolute { position: absolute; }
         .top-0 { top: 0; }
         .right-0 { right: 0; }
+        
+        /* Buttons/Boxes */
         .bg-purple-200 { background-color: #e9d5ff; }
         .hover\:bg-gray-300:hover { background-color: #d1d5db; }
         .text-gray-800 { color: #1f2937; }
@@ -50,17 +53,50 @@
         .p-2 { padding: 0.5rem; }
         .border { border-width: 1px; }
         .rounded-md { border-radius: 0.375rem; }
-        .text-center { text-align: center; }
-        .relative { position: relative; }
-        .h-96 { height: 24rem; } /* Equivalent to 24rem */
+        .h-96 { height: 24rem; } 
+
+        /* Loading Screen Styles */
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            font-size: 1.5rem;
+            color: #4b5563;
+        }
+        .hidden { display: none !important; }
+        
+        /* Debug Log Styles */
+        #debug-log {
+            margin-top: 1rem;
+            padding: 0.5rem;
+            background-color: #1f2937;
+            color: #10b981;
+            font-family: monospace;
+            white-space: pre-wrap;
+            height: 8rem;
+            overflow-y: scroll;
+            border-radius: 0.375rem;
+            font-size: 0.8rem;
+        }
     </style>
 </head>
 <body class="bg-gray-100">
 
-    <div class="container mx-auto p-8 max-w-5xl space-y-8">
+    <div id="loading-overlay">
+        Loading file list from SD card...
+    </div>
+
+    <div id="main-content" class="container mx-auto p-8 max-w-5xl space-y-8 hidden">
         <header class="text-center relative">
-            <h1 class="text-4xl font-bold">ESP32 Data Fetcher</h1>
-            <p class="text-gray-500 mt-2">Connect to the ESP32's Wi-Fi to fetch data.</p>
+            <h1 class="text-4xl font-bold">ESP32 CSV Data Logger</h1>
+            <p class="text-gray-500 mt-2">Select a CSV file from SD card to visualize data.</p>
             <div class="absolute top-0 right-0">
                  <a href="/parameters.html" class="bg-purple-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg">
                     Parameters
@@ -71,170 +107,340 @@
         <main class="space-y-8">
             <div class="bg-white rounded-lg shadow-md p-6">
                 <h2 class="text-xl font-semibold mb-4">Data Management</h2>
-                <button id="fetchButton" class="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-lg">Fetch and Display Data</button>
-            </div>
-            <div class="bg-white rounded-lg shadow-md p-6">
                 <div class="flex flex-col md:flex-row justify-between items-center mb-4">
-                    <h2 class="text-xl font-semibold">Data Visualization</h2>
-                    <div class="mt-4 md:mt-0">
-                        <label for="channel-select" class="mr-2 text-gray-700">Select Channel:</label>
-                        <select id="channel-select" class="p-2 border rounded-md bg-white">
-                            <option value="" disabled selected>Loading channels...</option>
+                    <div class="mt-4 md:mt-0 w-full">
+                        <label for="fileSelector" class="mr-2 text-gray-700">Select File:</label>
+                        <select id="fileSelector" class="p-2 border rounded-md bg-white w-full md:w-auto">
+                            <option value="">-- Select File --</option>
                         </select>
                     </div>
                 </div>
-                <p id="data-status" class="text-center text-gray-500 mb-4">Click the button to begin.</p>
-                <div class="relative h-96"><canvas id="dataChart"></canvas></div>
+                <button id="loadBtn" onclick="loadChart()" class="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-lg">Load Chart</button>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold mb-4">Data Visualization</h2>
+                <p id="status" class="text-center text-gray-500 mb-4">Select a file and click Load Chart to begin.</p>
+                
+                <div id="progress" class="w-full h-8 bg-gray-200 rounded-full overflow-hidden mb-4 hidden">
+                    <div id="progressBar" class="h-full bg-purple-500 text-white text-center leading-8" style="width: 0%;">0%</div>
+                </div>
+
+                <div class="relative h-96">
+                    <canvas id="myChart"></canvas>
+                </div>
+            </div>
+
+            <div id="debug-log-container" class="bg-white rounded-lg shadow-md p-6"> 
+                <div class="mt-4">
+                    <h3 class="text-xl font-semibold text-gray-800">Debug Log</h3>
+                    <pre id="debug-log">System Initialized. Waiting for file selection...</pre>
+                </div>
             </div>
         </main>
     </div>
 
 <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const fetchButton = document.getElementById('fetchButton');
-        const dataStatus = document.getElementById('data-status');
-        const chartCanvas = document.getElementById('dataChart');
-        const channelSelect = document.getElementById('channel-select');
-        let dataChart;
-        let parsedCsvData = [];
+    const DEBUG = false;
+    const LOG_TIME_PREFIX = () => `[${new Date().toLocaleTimeString('en-US', {hour12: false})}] `;
+    
+    function logMessage(message, isError = false) {
+        if (!DEBUG) {
+            return;
+        }
 
-        // Global variable to store configuration fetched from ESP32
-        let channelConfigData = []; 
+        const logBox = document.getElementById('debug-log');
+        const logEntry = LOG_TIME_PREFIX() + (isError ? 'ERROR: ' : 'INFO: ') + message + '\n';
+        
+        if (isError) {
+             console.error(message);
+        } else {
+             console.log(message);
+        }
+        
+        logBox.textContent += logEntry;
+        logBox.scrollTop = logBox.scrollHeight;
+    }
 
-        function initializeChart() { 
-            if (dataChart) dataChart.destroy(); 
-            dataChart = new Chart(chartCanvas.getContext('2d'), { 
-                type: 'line', 
-                data: { 
-                    labels: [], 
-                    datasets: [{ 
-                        label: 'Sensor Data', 
-                        data: [], 
-                        borderColor: 'rgba(75, 192, 192, 1)', 
-                        backgroundColor: 'rgba(75, 192, 192, 0.2)', 
-                        fill: true, 
-                        pointRadius: 1, 
-                        borderWidth: 1 
-                    }] 
-                }, 
-                options: { 
-                    responsive: true, 
+    let chart = null;
+    const timestamps = [];
+    const valueData = [];
+    let isLoading = false;
+    
+    // Load available channels on page load
+    window.addEventListener('load', () => {
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const mainContent = document.getElementById('main-content');
+        const logContainer = document.getElementById('debug-log-container');
+
+        if (!DEBUG) {
+            logContainer.classList.add('hidden');
+        }
+
+        logMessage('Attempting to fetch channel list from /api/files...');
+        
+        fetch('/api/files')
+            .then(response => response.json())
+            .then(data => {
+                const selector = document.getElementById('fileSelector');
+            
+                if (data.channels && data.channels.length > 0) {
+                    data.channels.forEach(channel => {
+                        const option = document.createElement('option');
+                        option.value = channel.filename.replace('.csv', ''); // e.g., "LOG_01"
+                        option.textContent = channel.name; // e.g., "Voltage_A" or "Channel 1"
+                        selector.appendChild(option);
+                    });
+                    logMessage(`Channel list loaded successfully. Found ${data.channels.length} channels.`);
+                } else {
+                    logMessage('No channels available for download.', true);
+                    selector.innerHTML += '<option value="" disabled>No data available</option>';
+                }
+            
+                // Hide loading screen and show content
+                loadingOverlay.classList.add('hidden');
+                mainContent.classList.remove('hidden');
+            })
+            .catch(err => {
+                console.error('Error loading channel list:', err);
+                logMessage(`Error loading channel list: ${err.message}`, true);
+                showStatus('Error loading channel list', 'error');
+                
+                // Still show main content even on error
+                loadingOverlay.classList.add('hidden');
+                mainContent.classList.remove('hidden');
+            });
+    });
+
+    
+    function showStatus(message, type = 'info') {
+        const statusDiv = document.getElementById('status');
+        statusDiv.textContent = message;
+        statusDiv.style.color = type === 'error' ? '#f44336' : '#6b7280';
+    }
+    
+    function updateProgress(percent) {
+        const progressDiv = document.getElementById('progress');
+        const progressBar = document.getElementById('progressBar');
+        progressDiv.classList.remove('hidden');
+        progressBar.style.width = percent + '%';
+        progressBar.textContent = Math.round(percent) + '%';
+    }
+    
+    function hideProgress() {
+        document.getElementById('progress').classList.add('hidden');
+    }
+    
+    async function loadChart() {
+        if(isLoading) return;
+        
+        const filename = document.getElementById('fileSelector').value;
+        if(!filename) {
+            alert('Please select a file');
+            return;
+        }
+        
+        isLoading = true;
+        document.getElementById('loadBtn').disabled = true;
+        
+        // Clear previous data
+        timestamps.length = 0;
+        valueData.length = 0;
+        
+        showStatus('Loading ' + filename + '.csv...');
+        updateProgress(0);
+        logMessage(`Starting to load ${filename}.csv...`);
+        
+        try {
+            await streamCSV(filename);
+            showStatus('Chart loaded successfully! (' + valueData.length + ' points)');
+            logMessage(`Chart loaded successfully with ${valueData.length} data points.`);
+            hideProgress();
+        } catch(error) {
+            console.error('Error:', error);
+            showStatus('Error loading file: ' + error.message, 'error');
+            logMessage(`Error loading file: ${error.message}`, true);
+            hideProgress();
+        }
+        
+        isLoading = false;
+        document.getElementById('loadBtn').disabled = false;
+    }
+    
+    async function streamCSV(filename) {
+        const response = await fetch('/api/stream?file=' + filename);
+        
+        if(!response.ok) {
+            throw new Error('HTTP error ' + response.status);
+        }
+        
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        
+        let buffer = '';
+        let rowCount = 0;
+        const BATCH_SIZE = 50;
+        let estimatedTotal = 1000;
+        
+        while(true) {
+            const {done, value} = await reader.read();
+            
+            if(done) break;
+            
+            buffer += decoder.decode(value, {stream: true});
+            
+            let lines = buffer.split('\n');
+            buffer = lines.pop();
+            
+            lines.forEach((line, idx) => {
+                if(line.trim() === '') return;
+                
+                if(DEBUG && rowCount === 0) {
+                    rowCount++;
+                    return;
+                }
+                
+                const cols = line.split(',');
+                
+                if(cols.length >= 11) {
+                    const year = cols[0].trim();
+                    const month = cols[1].trim();
+                    const date = cols[2].trim();
+                    const day = cols[3].trim();
+                    const hour = cols[4].trim();
+                    const minutes = cols[5].trim();
+                    const second = cols[6].trim();
+                    
+                    const timeLabel = `${month}/${date} ${hour}:${minutes}:${second}`;
+                    
+                    timestamps.push(timeLabel);
+                    
+                    const valueStr = cols[10].trim();
+                    const value = parseFloat(cols[10].trim());
+
+                    if (!isNaN(value)) {
+                        valueData.push(value);
+                    } else {
+                        console.warn(`Row ${rowCount}: Invalid value "${valueStr}"`);
+                        valueData.push(0);
+                    }
+                    
+                    rowCount++;
+                    
+                    if(rowCount % BATCH_SIZE === 0) {
+                        updateChart();
+                        updateProgress((rowCount / estimatedTotal) * 100);
+                    }
+                }
+            });
+        }
+        
+        if(buffer.trim()) {
+            const cols = buffer.split(',');
+            if(cols.length >= 11) {
+                const month = cols[1].trim();
+                const date = cols[2].trim();
+                const hour = cols[4].trim();
+                const minutes = cols[5].trim();
+                const second = cols[6].trim();
+                timestamps.push(`${month}/${date} ${hour}:${minutes}:${second}`);
+                valueData.push(parseFloat(cols[10].trim()));
+            }
+        }
+        
+        updateProgress(100);
+        updateChart();
+    }
+    
+    function updateChart() {
+        if(chart) {
+            chart.data.labels = timestamps.slice();
+            chart.data.datasets[0].data = valueData.slice();
+            chart.update('none');
+        } else {
+            const minValue = Math.min(...valueData);
+            const maxValue = Math.max(...valueData);
+            const range = maxValue - minValue;
+            const padding = range * 0.1 || 1;
+
+            const ctx = document.getElementById('myChart').getContext('2d');
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: timestamps,
+                    datasets: [{
+                        label: 'Sensor Value',
+                        data: valueData,
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 4,
+                        pointBackgroundColor: 'rgb(75, 192, 192)',
+                        pointBorderColor: '#fff',
+                        pointHoverRadius: 6,
+                        pointHoverBackgroundColor: 'rgb(75, 192, 192)',
+                        pointHoverBorderColor: '#fff',
+                        fill: true,
+                        tension: 0.1,
+                        spanGaps: true
+                    }]
+                },
+                options: {
+                    responsive: true,
                     maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    plugins: {
+                        legend: {
+                            display: true
+                        },
+                        tooltip: {
+                            enabled: true,
+                            mode: 'index',
+                            intersect: false
+                        }
+                    },
                     scales: {
                         x: {
                             title: {
                                 display: true,
-                                text: 'Time (ms) Since Boot'
+                                text: 'Timestamp'
+                            },
+                            ticks: {
+                                maxTicksLimit: 10,
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Value'
+                            },
+                            suggestedMin: minValue - padding,
+                            suggestedMax: maxValue + padding,
+                            ticks: {
+                                callback: function(value) {
+                                    return value.toFixed(2);
+                                }
                             }
                         }
                     }
-                } 
-            }); 
-        }
-
-        async function fetchConfig() {
-            try {
-                const response = await fetch('/config.json');
-                if (!response.ok) throw new Error('HTTP error fetching config');
-                
-                channelConfigData = await response.json();
-                populateChannelSelect(channelConfigData.channels);
-            } catch (error) {
-                console.error('Failed to fetch config:', error);
-                channelSelect.innerHTML = '<option value="" disabled selected>Error loading config</option>';
-                dataStatus.textContent = 'Error loading channel configuration. Check ESP32 server.';
-            }
-        }
-
-        function populateChannelSelect(channels) {
-            channelSelect.innerHTML = '';
-            let defaultSelected = false;
-
-            channels.forEach(ch => {
-                const option = document.createElement('option');
-                option.value = ch.id; // Channel ID (1, 2, 3, or 4)
-                
-                const status = ch.enabled ? '' : ' (Disabled)';
-                option.textContent = `${ch.id}: ${ch.name}${status}`;
-                
-                option.disabled = !ch.enabled; // Disable selection if not enabled
-
-                if (ch.enabled && !defaultSelected) {
-                    option.selected = true;
-                    defaultSelected = true;
                 }
-                
-                channelSelect.appendChild(option);
             });
 
-            if (!defaultSelected) {
-                dataStatus.textContent = 'No channels are currently enabled for logging. Check Parameters.';
-            }
+            console.log('Chart created with:');
+            console.log('- Data points:', valueData.length);
+            console.log('- Min value:', minValue);
+            console.log('- Max value:', maxValue);
+            console.log('- Y-axis range:', minValue - padding, 'to', maxValue + padding);
+            
+            logMessage(`Chart rendered with ${valueData.length} points. Y-axis: ${(minValue - padding).toFixed(2)} to ${(maxValue + padding).toFixed(2)}`);
         }
-
-        fetchButton.addEventListener('click', async () => { 
-            // 1. Check if config data is available first
-            if (channelConfigData.length === 0) {
-                 await fetchConfig();
-                 if (channelConfigData.length === 0) return;
-            }
-
-            // 2. Fetch the data file
-            const url = `/data.csv`; 
-            dataStatus.textContent = 'Fetching data...'; 
-            fetchButton.disabled = true; 
-            try { 
-                const response = await fetch(url); 
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`); 
-                const csvText = await response.text(); 
-                
-                // Process the CSV. Assuming columns are [Millis, Ch1_Data, Ch2_Data, Ch3_Data, Ch4_Data]
-                parsedCsvData = csvText.trim().split('\n').map(row => row.split(',')); 
-                updateChart(); 
-            } catch (error) { 
-                dataStatus.textContent = `Failed to fetch data. Error: ${error}. Ensure the ESP32 log file is ready.`; 
-            } finally { 
-                fetchButton.disabled = false; 
-            } 
-        });
-
-        channelSelect.addEventListener('change', () => { 
-            if (parsedCsvData.length > 0) { 
-                updateChart(); 
-            } 
-        });
-
-        function updateChart() { 
-            if (parsedCsvData.length === 0) { 
-                dataStatus.textContent = 'No data available. Click "Fetch" to load data.'; 
-                return; 
-            } 
-            
-            // Get the selected channel ID (1, 2, 3, or 4)
-            const selectedChannelID = parseInt(channelSelect.value, 10); 
-            // FIXED COLUMN MAPPING: CSV column index is (Channel ID)
-            // Column 0 is Millis. Column 1 is Ch1, Column 2 is Ch2, etc.
-            const selectedColumnIndex = selectedChannelID; 
-            
-            const selectedChannelName = channelSelect.options[channelSelect.selectedIndex].text; 
-
-            // Column 0 is the millis() value, used for the X-axis labels
-            const labels = parsedCsvData.map(row => row[0]); 
-            
-            // Extract data from the selected column
-            const data = parsedCsvData.map(row => parseFloat(row[selectedColumnIndex]) || 0); 
-
-            dataChart.data.labels = labels; 
-            dataChart.data.datasets[0].data = data; 
-            dataChart.data.datasets[0].label = selectedChannelName; 
-            dataChart.update(); 
-            
-            dataStatus.textContent = `Displaying ${data.length} records for ${selectedChannelName}. (Using CSV Column ${selectedColumnIndex})`; 
-        }
-
-        initializeChart();
-        fetchConfig(); // Load channel configuration when the page loads
-    });
+    }
 </script>
+
 </body>
 </html>
